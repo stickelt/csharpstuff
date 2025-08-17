@@ -70,6 +70,49 @@ public ProposalDTO GetProposalDetails(string paNumber)
 
     return dto;
 }
+
+// LobResolver class for resolving Line of Business text to standardized values
+public sealed class LobResolver
+{
+    private readonly Dictionary<string,(int Id,string Name)> _exact;
+    private readonly Dictionary<string,(int Id,string Name)> _relaxed;
+    private readonly Dictionary<string,string> _aliases;
+
+    public LobResolver(LineOfBusinessDataLoader lobLoader)
+    {
+        var pick = lobLoader.GetPickListValues(); // Id/Text
+        _exact = pick.ToDictionary(
+            p => p.Text.Trim().ToLowerInvariant(),
+            p => (p.Id, p.Text));
+
+        _relaxed = _exact.ToDictionary(kvp => Relax(kvp.Key), kvp => kvp.Value);
+
+        _aliases = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["sac"]  = "sikorsky",
+            ["iwfs"] = "integrated warfare systems and sensors",
+            ["tls"]  = "training and logistics solutions",
+            ["c6isr"]= "c6isr",
+            ["cyber ships and advanced technologies"]  = "cyber, ships & advanced technologies",
+            ["cyber, ships and advanced technologies"] = "cyber, ships & advanced technologies",
+            ["cyber ships & advanced technologies"]    = "cyber, ships & advanced technologies"
+        };
+    }
+
+    public (int Id,string Name)? Resolve(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var key = raw.Trim().ToLowerInvariant();
+        var canonical = _aliases.TryGetValue(key, out var mapped) ? mapped : key;
+
+        if (_exact.TryGetValue(canonical, out var hit)) return hit;
+        return _relaxed.TryGetValue(Relax(canonical), out hit) ? hit : null;
+    }
+
+    private static string Relax(string s) =>
+        System.Text.RegularExpressions.Regex.Replace(s.Replace("&","and"), @"\W+", "")
+                                            .ToLowerInvariant();
+}
 ```
 
 ## API Documentation
