@@ -182,6 +182,83 @@ The goal is to handle Line of Business alias resolution server-side in C# rather
 ### When to Use Each Approach
 - Use **LobResolver** when you need picklist validation and complex matching rules
 - Use **LineOfBusinessMapper** when you have simple, known aliases to resolve
+- Use **LineOfBusinessHelper** when you need to combine aliases with official picklist validation
+
+## Recommended Approach: LineOfBusinessHelper with Picklist Integration
+
+This approach combines the best of both worlds - alias mapping with official picklist validation:
+
+```csharp
+// LineOfBusinessHelper.cs - Combines aliases with picklist validation
+public static class LineOfBusinessHelper
+{
+    private static readonly Dictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        { "sac", "Sikorsky" },
+        { "infss", "Integrated Warfare Systems and Sensors" },
+        { "tlss", "Training and Logistics Solutions" },
+        { "cdism", "CDISM" },
+        { "cyber ships and advanced technologies", "Cyber, Ships & Advanced Technologies" }
+    };
+
+    public static string Resolve(string raw, IEnumerable<PickListDTO> pickList)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+            return raw;
+
+        // First, try alias map
+        if (_aliases.TryGetValue(raw.Trim(), out var mapped))
+            raw = mapped;
+
+        // Then, resolve against the picklist
+        var match = pickList.FirstOrDefault(p =>
+            string.Equals(p.Text, raw, StringComparison.OrdinalIgnoreCase));
+
+        return match?.Text ?? raw;
+    }
+}
+
+// Updated PldDTODataLoader.GetProposalDetails implementation
+public ProposalDTO GetProposalDetails(string paNumber)
+{
+    ProposalDTO result = ctx.Proposals
+        .AsNoTracking()
+        .Where(p => p.PA_Number == paNumber)
+        .Select(p => new ProposalDTO
+        {
+            PA_Number = p.PA_Number,
+            Line_of_Business = p.Line_of_Business,
+            Project_Start_Date = p.Project_Start_Date,
+            Project_End_Date = p.Project_End_Date
+        })
+        .FirstOrDefault();
+
+    if (result != null)
+    {
+        var pickList = _lineOfBusinessDataLoader.GetPickListValues();
+        result.Line_of_Business = LineOfBusinessHelper.Resolve(result.Line_of_Business, pickList);
+    }
+
+    return result;
+}
+```
+
+### Why This Approach Works Best
+
+✅ **Uses Official Picklist**: Validates against the actual picklist data
+✅ **Supports Legacy Codes**: Maps "sac", "cdism", etc. to official names
+✅ **Server-side Clean**: Angular receives standardized values
+✅ **Maintainable**: Single source of truth for aliases
+✅ **Flexible**: Easy to add new aliases or modify existing ones
+
+### Component Responsibilities
+
+| Component | Role |
+|-----------|------|
+| `_lineOfBusinessDataLoader.GetPickListValues()` | Source of valid business types |
+| `_aliases` dictionary | Maps legacy codes like "sac" to official names |
+| `LineOfBusinessHelper.Resolve()` | Combines alias and picklist resolution |
+| `GetProposalDetails()` | Calls Resolve() before returning DTO |
 
 ## API Documentation
 If applicable, document your API endpoints here.
