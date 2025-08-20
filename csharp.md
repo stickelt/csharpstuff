@@ -260,6 +260,119 @@ public ProposalDTO GetProposalDetails(string paNumber)
 | `LineOfBusinessHelper.Resolve()` | Combines alias and picklist resolution |
 | `GetProposalDetails()` | Calls Resolve() before returning DTO |
 
+## Unit Testing Examples
+
+Here's a comprehensive unit test example for the `WorkspaceControllerLogic.NextTrackingNumber` method:
+
+```csharp
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Moq;
+
+// adjust namespaces to your real ones:
+using GenBOE.ActionLogic.Web.ControllerLogic;
+using GenBOE.DTO; // for WorkspaceDTO
+
+namespace GenBOE.Tests.ActionLogic.Web.ControllerLogic
+{
+    [TestClass]
+    public class WorkspaceControllerLogic_NextTrackingNumber_Tests
+    {
+        private WorkspaceControllerLogic CreateSut()
+        {
+            // If the ctor needs many deps, create Moq stubs for each.
+            // Because NextTrackingNumber uses NONE of them, any dummy values are fine.
+            // Example with a single-arg ctor:
+            // var dep = new Mock<ISomeDependency>(MockBehavior.Strict);
+            // return new WorkspaceControllerLogic(dep.Object);
+
+            // If there's a parameterless ctor, use it:
+            return new WorkspaceControllerLogic();
+        }
+
+        [TestMethod]
+        public void NextTrackingNumber_WhenNoExistingMatches_ReturnsBasePaNumber()
+        {
+            // Arrange
+            WorkspaceControllerLogic sut = CreateSut();
+            IEnumerable<WorkspaceDTO> workspaces = new List<WorkspaceDTO>
+            {
+                new WorkspaceDTO { Shortname = "SOMETHING-ELSE" },
+                new WorkspaceDTO { Shortname = "OTHER" }
+            };
+            string paNumber = "PA";
+
+            // Act
+            Dictionary<string, object> result = sut.NextTrackingNumber(workspaces, paNumber);
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.IsTrue(result.ContainsKey("ShortName"));
+            Assert.AreEqual("PA", result["ShortName"]);
+            Assert.AreEqual("PA", result["TrackingNumber"]);
+            Assert.AreEqual(0, (int)result["Id"]);
+            Assert.AreEqual(string.Empty, (string)result["WorkspaceName"]);
+        }
+
+        [TestMethod]
+        public void NextTrackingNumber_WhenExistingSuffixes_ReturnsIncrementedSuffix()
+        {
+            // Arrange
+            WorkspaceControllerLogic sut = CreateSut();
+            IEnumerable<WorkspaceDTO> workspaces = new List<WorkspaceDTO>
+            {
+                new WorkspaceDTO { Shortname = "PA" },          // exact match -> relevant
+                new WorkspaceDTO { Shortname = "PA-001" },
+                new WorkspaceDTO { Shortname = "PA-007" },      // max = 7
+                new WorkspaceDTO { Shortname = "PA-003" },
+                new WorkspaceDTO { Shortname = "IRRELEVANT" }
+            };
+            string paNumber = "PA";
+
+            // Act
+            Dictionary<string, object> result = sut.NextTrackingNumber(workspaces, paNumber);
+
+            // Assert
+            Assert.IsNotNull(result);
+            Assert.AreEqual("PA-008", result["ShortName"]); // padded increment of max
+            Assert.AreEqual("PA", result["TrackingNumber"]);
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentNullException))]
+        public void NextTrackingNumber_WhenWorkspacesIsNull_Throws()
+        {
+            // Arrange
+            WorkspaceControllerLogic sut = CreateSut();
+            IEnumerable<WorkspaceDTO> workspaces = null;
+            string paNumber = "PA";
+
+            // Act
+            sut.NextTrackingNumber(workspaces, paNumber);
+
+            // Assert handled by ExpectedException
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
+        public void NextTrackingNumber_WhenPaNumberBlank_Throws()
+        {
+            // Arrange
+            WorkspaceControllerLogic sut = CreateSut();
+            IEnumerable<WorkspaceDTO> workspaces = Enumerable.Empty<WorkspaceDTO>();
+            string paNumber = "  ";
+
+            // Act
+            sut.NextTrackingNumber(workspaces, paNumber);
+
+            // Assert handled by ExpectedException
+        }
+    }
+}
+```
+
 ## API Documentation
 If applicable, document your API endpoints here.
 
